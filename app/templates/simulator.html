@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zebra Crossing Simulator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Audio Controls -->
+    <div class="audio-controls">
+        <button id="toggleMusic" title="Toggle Background Music">
+            <i class="fas fa-music"></i> Music
+        </button>
+        <button id="toggleSound" title="Toggle Sound Effects">
+            <i class="fas fa-volume-up"></i> Sound
+        </button>
+    </div>
+
+    <!-- Audio Elements -->
+    <audio id="backgroundMusic" loop>
+        <source src="{{ url_for('static', filename='audio/background-music.mp3') }}" type="audio/mpeg">
+    </audio>
+    <audio id="trafficSound" loop>
+        <source src="{{ url_for('static', filename='audio/traffic.mp3') }}" type="audio/mpeg">
+    </audio>
+    <audio id="successSound">
+        <source src="{{ url_for('static', filename='audio/correct.mp3') }}" type="audio/mpeg">
+    </audio>
+    <audio id="countdownSound">
+        <source src="{{ url_for('static', filename='audio/countdown.mp3') }}" type="audio/mpeg">
+    </audio>
+    <audio id="failureSound">
+        <source src="{{ url_for('static', filename='audio/incorrect.mp3') }}" type="audio/mpeg">
+    </audio>
+    
+    <div class="main-container">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-primary rounded-pill mb-2 flex-shrink-0">
+            <i class="fas fa-arrow-left"></i> Back to Home
+        </a>
+        
+        <div class="row g-3 content-row">
+            <!-- Camera Feed Column -->
+            <div class="col-md-6 content-col">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0"><i class="fas fa-camera"></i> Your Camera</h5>
+                    </div>
+                    <div class="card-body p-0 position-relative">
+                        <div id="cameraContainer">
+                            <img src="{{ url_for('video_feed') }}" alt="Video Feed">
+                            <div id="poseOverlay" class="position-absolute top-0 end-0 p-2 bg-dark text-white rounded-start">
+                                <span id="currentPose">Waiting...</span>
+                            </div>
+                            <!-- Step Feedback Overlay -->
+                            <div id="successFeedback" class="step-feedback feedback-success">
+                                <span class="feedback-icon">✓</span>
+                            </div>
+                            <div id="failureFeedback" class="step-feedback feedback-failure">
+                                <span class="feedback-icon">✗</span>
+                            </div>
+                            <div id="timeoutFeedback" class="step-feedback feedback-timeout">
+                                <span class="feedback-icon">⏱️</span>
+                            </div>
+                            <!-- Timer Indicator -->
+                            <div id="stepTimer" class="step-timer"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Instructions Column -->
+            <div class="col-md-6 content-col">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="card-title mb-0"><i class="fas fa-walking"></i> Crossing Instructions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="gameArea">
+                            <!-- Progress Bar -->
+                            <div id="progressBarContainer" class="mb-3 flex-shrink-0">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <h6 class="mb-0"><i class="fas fa-tasks"></i> Progress</h6>
+                                    <div>
+                                        <span class="badge bg-primary px-2 py-1 me-1">Level: <span id="level">1</span></span>
+                                        <span class="badge bg-success px-2 py-1">Points: <span id="points">0</span></span>
+                                    </div>
+                                </div>
+                                <div class="progress">
+                                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Simulation Area -->
+                            <div id="simulationArea" class="mb-3 flex-shrink-0">
+                                <div id="roadAnimation" class="road-container">
+                                    <div class="pedestrian-sign"></div>
+                                    <div class="road">
+                                        <div class="lane"></div>
+                                        <div class="crossing">
+                                            <div class="stripe"></div>
+                                            <div class="stripe"></div>
+                                            <div class="stripe"></div>
+                                            <div class="stripe"></div>
+                                            <div class="stripe"></div>
+                                        </div>
+                                        <div class="lane"></div>
+                                    </div>
+                                    <div id="character" class="character">
+                                        <div class="character-body">
+                                            <div class="character-head"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Instructions -->
+                            <div id="instructionsContainer" class="mb-3 text-center flex-shrink-0">
+                                <h2 id="currentStep" class="h4 mb-2">
+                                    <span class='fs-3'>🚸</span> Get Ready to Cross!
+                                </h2>
+                                <p id="instructionText" class="mb-2">
+                                    We'll guide you through each step of crossing the road safely.
+                                </p>
+                                
+                                <!-- Current Pose Instruction -->
+                                <div id="poseInstruction" class="alert alert-info my-2 animate__animated animate__pulse">
+                                    <span id="poseToPerform" class="h5">Press Start Exercise when you're ready!</span>
+                                </div>
+                                
+                                <!-- Countdown -->
+                                <div id="countdownContainer" class="my-2 d-none">
+                                    <span id="countdown" class="display-3">3</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Game Controls -->
+                            <div id="gameControls" class="mt-auto text-center flex-shrink-0">
+                                <button id="startButton" class="btn btn-primary btn-lg rounded-pill shadow animate__animated animate__pulse animate__infinite">
+                                    <i class="fas fa-play me-2"></i> Start Exercise
+                                </button>
+                                <button id="resetButton" class="btn btn-success btn-lg rounded-pill shadow d-none">
+                                    <i class="fas fa-redo me-2"></i> Try Again
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/simulator.js') }}"></script>
+</body>
+</html> 

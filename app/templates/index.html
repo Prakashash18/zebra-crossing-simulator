@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Zebra Crossing Simulator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+        
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        
+        .main-container {
+            flex: 1;
+            padding-top: 20px;
+            padding-bottom: 20px;
+        }
+        
+        .instruction-card {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            margin-bottom: 20px;
+        }
+        
+        .instruction-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .instruction-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            color: #3f51b5;
+        }
+        
+        .welcome-title {
+            font-size: 3.5rem;
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        
+        .welcome-subtitle {
+            font-size: 1.5rem;
+            color: #34495e;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        
+        .pose-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .pose-item {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border: 2px solid #e9ecef;
+        }
+        
+        .pose-item i {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            color: #3f51b5;
+        }
+        
+        .start-button {
+            background: linear-gradient(45deg, #3f51b5, #2196f3);
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            border-radius: 30px;
+            box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .start-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(33, 150, 243, 0.4);
+            background: linear-gradient(45deg, #2196f3, #3f51b5);
+        }
+        
+        .mascot {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            animation: bounce 2s infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        /* Audio Controls */
+        .audio-controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        
+        .audio-controls button {
+            background-color: #3f51b5;
+            color: white;
+            border: none;
+            border-radius: 30px;
+            padding: 8px 15px;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+        }
+        
+        .audio-controls button i {
+            margin-right: 5px;
+        }
+        
+        .audio-controls button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            background-color: #2196f3;
+        }
+        
+        .audio-controls button.active {
+            background-color: #4caf50;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .welcome-title {
+                font-size: 2.5rem;
+            }
+            
+            .welcome-subtitle {
+                font-size: 1.2rem;
+            }
+            
+            .start-button {
+                padding: 12px 30px;
+                font-size: 1.2rem;
+            }
+            
+            .mascot {
+                font-size: 3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Audio Element for Background Music -->
+    <audio id="backgroundMusic" loop autoplay muted>
+        <source src="{{ url_for('static', filename='audio/background-music.mp3') }}" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    
+    <!-- Small video for autoplay permission (hidden) -->
+    <video id="silentVideo" muted autoplay playsinline style="display:none;"></video>
+
+    <!-- Audio Controls -->
+    <div class="audio-controls">
+        <button id="toggleMusic" title="Toggle Background Music">
+            <i class="fas fa-volume-mute"></i> Click for Sound
+        </button>
+    </div>
+
+    <div class="container main-container py-4">
+        <div class="text-center mb-4">
+            <div class="mascot">🚶‍♂️</div>
+            <h1 class="welcome-title">Welcome to the Zebra Crossing Simulator!</h1>
+            <p class="welcome-subtitle">Learn how to cross the road safely with our fun interactive game!</p>
+            <a href="{{ url_for('simulator') }}" class="btn btn-primary btn-lg start-button">
+                Start Learning! 🎮
+            </a>
+        </div>
+
+        <div class="row justify-content-center mt-5">
+            <div class="col-lg-10">
+                <h2 class="text-center mb-4">How to Play 🎯</h2>
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="card instruction-card h-100">
+                            <div class="card-body text-center">
+                                <div class="instruction-icon">📷</div>
+                                <h3 class="card-title h4">Step 1</h3>
+                                <p class="card-text">Allow camera access so we can see your poses!</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card instruction-card h-100">
+                            <div class="card-body text-center">
+                                <div class="instruction-icon">👂</div>
+                                <h3 class="card-title h4">Step 2</h3>
+                                <p class="card-text">Listen to the friendly voice instructions!</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card instruction-card h-100">
+                            <div class="card-body text-center">
+                                <div class="instruction-icon">🎯</div>
+                                <h3 class="card-title h4">Step 3</h3>
+                                <p class="card-text">Follow along and show the correct poses!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 class="text-center mt-5 mb-4">Poses You'll Learn 🌟</h2>
+                <div class="pose-list">
+                    <div class="pose-item">
+                        <i class="fas fa-arrow-left"></i>
+                        <h4>Look Left</h4>
+                    </div>
+                    <div class="pose-item">
+                        <i class="fas fa-arrow-right"></i>
+                        <h4>Look Right</h4>
+                    </div>
+                    <div class="pose-item">
+                        <i class="fas fa-hand-paper"></i>
+                        <h4>Signal to Cross</h4>
+                    </div>
+                    <div class="pose-item">
+                        <i class="fas fa-walking"></i>
+                        <h4>Walk Safely</h4>
+                    </div>
+                </div>
+
+                <div class="text-center mt-5">
+                    <div class="alert alert-info p-4 mx-auto" style="max-width: 600px;">
+                        <h4 class="alert-heading">Safety First! 🛡️</h4>
+                        <p class="mb-0">Remember to always cross roads with an adult and use proper crossings when available!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Audio control script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const backgroundMusic = document.getElementById('backgroundMusic');
+            const silentVideo = document.getElementById('silentVideo');
+            const toggleMusicBtn = document.getElementById('toggleMusic');
+            let isMusicEnabled = false; // Start with music muted
+            
+            // Create a blob URL for a silent video to help with autoplay
+            try {
+                // Create a silent video stream
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const emptyBlob = new Blob([new Uint8Array([0, 0, 0, 28, 102, 116, 121, 112, 105, 115, 111, 109, 0, 0, 2, 0])], {type: 'video/mp4'});
+                silentVideo.src = URL.createObjectURL(emptyBlob);
+            } catch (e) {
+                console.log("Could not create audio context", e);
+            }
+            
+            // Function to unmute background music
+            function enableAudio() {
+                backgroundMusic.muted = false;
+                isMusicEnabled = true;
+                updateMusicButtonState();
+                // Force play in case it wasn't autoplaying
+                backgroundMusic.play().catch(err => {
+                    console.log("Music playback failed:", err);
+                    isMusicEnabled = false;
+                    updateMusicButtonState();
+                });
+            }
+            
+            // Initialize interaction detection for browsers that require user gesture
+            function setupInteractionListener() {
+                // Function to handle any user interaction
+                function handleFirstInteraction() {
+                    enableAudio();
+                    // Remove all listeners after first interaction
+                    document.removeEventListener('click', handleFirstInteraction);
+                    document.removeEventListener('touchstart', handleFirstInteraction);
+                    document.removeEventListener('keydown', handleFirstInteraction);
+                }
+                
+                // Add event listeners for common interaction types
+                document.addEventListener('click', handleFirstInteraction);
+                document.addEventListener('touchstart', handleFirstInteraction);
+                document.addEventListener('keydown', handleFirstInteraction);
+            }
+            
+            // Set up initial autoplay
+            setupInteractionListener();
+            
+            // Set initial volume
+            backgroundMusic.volume = 0.5;
+            
+            // Toggle music button - explicit user control
+            toggleMusicBtn.addEventListener('click', function(e) {
+                e.stopPropagation(); // Don't trigger document click
+                
+                if (isMusicEnabled) {
+                    // Mute music
+                    backgroundMusic.muted = true;
+                    isMusicEnabled = false;
+                } else {
+                    // Unmute music
+                    enableAudio();
+                }
+                
+                updateMusicButtonState();
+            });
+            
+            // Update button state function
+            function updateMusicButtonState() {
+                if (isMusicEnabled) {
+                    toggleMusicBtn.innerHTML = `<i class="fas fa-volume-up"></i> Sound ON`;
+                    toggleMusicBtn.classList.add('active');
+                } else {
+                    toggleMusicBtn.innerHTML = `<i class="fas fa-volume-mute"></i> Click for Sound`;
+                    toggleMusicBtn.classList.remove('active');
+                }
+            }
+            
+            // Initialize button state
+            updateMusicButtonState();
+        });
+    </script>
+</body>
+</html> 
