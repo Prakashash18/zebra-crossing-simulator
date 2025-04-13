@@ -6,6 +6,7 @@ from pathlib import Path
 import time
 import traceback
 import base64
+import os
 
 # Import from utils module
 from utils import get_keypoints, extract_features_directly, draw_skeleton, POSE_CLASSES
@@ -461,7 +462,9 @@ def simulator():
 
 if __name__ == '__main__':
     try:
-        app.run(host='0.0.0.0', port=5001, debug=True)
+        # Get the PORT from environment variable for Cloud Run compatibility
+        port = int(os.environ.get('PORT', 5001))
+        app.run(host='0.0.0.0', port=port, debug=False)
     finally:
         # No need to release the camera as we're not using it directly
         pass 

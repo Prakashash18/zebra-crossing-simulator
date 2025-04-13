@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Editor directories and files
+.idea
+.vscode
+*.swp
+*.swo
+
+# macOS system files
+.DS_Store
+
+# Temp files
+*.log
+tmp/
+temp/
+
+# Unnecessary files for deployment
+README.md
+.github/
+.pytest_cache/
+tests/
+
+# We don't exclude models folder or YOLO model file as they are needed for deployment 

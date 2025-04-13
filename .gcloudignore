@@ -1,0 +1,60 @@
+# Ignore these files for deployment
+.git
+.gitignore
+.github
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# VS Code and PyCharm settings
+.vscode/
+.idea/
+
+# macOS system files
+.DS_Store
+
+# Docker files (already processed by Cloud Build)
+Dockerfile
+.dockerignore
+
+# Documentation and README files
+README.md
+README-deploy.md
+LICENSE
+
+# Don't ignore these important files
+!models/
+!yolo11n-pose.pt 
