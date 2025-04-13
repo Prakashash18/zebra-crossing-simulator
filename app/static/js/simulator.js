@@ -2448,3 +2448,198 @@ document.addEventListener('DOMContentLoaded', function() {
 // Add constant for maximum possible points
 const MAX_POINTS = config.gameSteps.reduce((total, step) => total + step.points, 0);
 
+// Add this new section near the top after document ready
+// Camera handling code for frame submission
+let videoElement;
+let canvasElement;
+let canvasContext;
+let isCapturingFrames = false;
+let frameSubmissionInterval = 200; // milliseconds between frame submissions
+let frameIntervalId = null;
+
+// Setup camera capture once document is ready
+function setupCameraCapture() {
+    console.log('Setting up camera capture for frame submission');
+    
+    // Create hidden video and canvas elements for frame capture
+    videoElement = document.createElement('video');
+    videoElement.id = 'cameraVideo';
+    videoElement.style.display = 'none';
+    videoElement.autoplay = true;
+    videoElement.playsinline = true;
+    document.body.appendChild(videoElement);
+    
+    canvasElement = document.createElement('canvas');
+    canvasElement.id = 'frameCanvas';
+    canvasElement.style.display = 'none';
+    canvasElement.width = 640;
+    canvasElement.height = 480;
+    document.body.appendChild(canvasElement);
+    
+    canvasContext = canvasElement.getContext('2d');
+    
+    // Request camera access
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+            .then(function(stream) {
+                videoElement.srcObject = stream;
+                console.log('Camera access granted');
+                startFrameCapture();
+            })
+            .catch(function(error) {
+                console.error('Error accessing camera:', error);
+                showCameraError(error.message);
+            });
+    } else {
+        console.error('getUserMedia not supported in this browser');
+        showCameraError('Camera access not supported in this browser');
+    }
+}
+
+// Start capturing and sending frames
+function startFrameCapture() {
+    if (isCapturingFrames) return;
+    
+    console.log('Starting frame capture');
+    isCapturingFrames = true;
+    
+    // Capture and send frames at regular intervals
+    frameIntervalId = setInterval(captureAndSendFrame, frameSubmissionInterval);
+}
+
+// Stop capturing frames
+function stopFrameCapture() {
+    if (!isCapturingFrames) return;
+    
+    console.log('Stopping frame capture');
+    isCapturingFrames = false;
+    
+    if (frameIntervalId) {
+        clearInterval(frameIntervalId);
+        frameIntervalId = null;
+    }
+}
+
+// Capture a frame and send it to the server
+function captureAndSendFrame() {
+    if (!videoElement || !canvasElement || !canvasContext || !isCapturingFrames) return;
+    
+    try {
+        // Draw the current video frame to the canvas
+        canvasContext.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+        
+        // Convert the canvas to a data URL (JPEG format)
+        const frameDataUrl = canvasElement.toDataURL('image/jpeg', 0.8);
+        
+        // Send the frame to the server
+        fetch('/submit_frame', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                frame: frameDataUrl
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Handle the response if needed
+            if (data.success && data.pose_name) {
+                // Update UI with the detected pose
+                gameState.connectionAttempts = 0;
+                gameState.isReconnecting = false;
+                gameState.lastSuccessfulConnection = Date.now();
+                
+                // Remove any error notifications
+                removeConnectionErrorNotification();
+                
+                // Update the current pose display
+                $currentPose.text(`${data.pose_name} (${Math.round(data.confidence * 100)}%)`);
+                
+                // Store the current detected pose for character mirroring
+                gameState.currentDetectedPose = data.pose_name;
+                
+                // Update character based on detected pose
+                updateCharacterDisplay();
+                
+                // If we're waiting for a pose in the game, check if it matches
+                if (gameState.waitingForPose && gameState.started) {
+                    // Check if pose is correct
+                    const currentStep = config.gameSteps[gameState.currentStep];
+                    const requiredPose = currentStep.poseRequired;
+                    
+                    if (data.pose_name === requiredPose && data.confidence >= config.poseConfidenceThreshold) {
+                        console.log(`Correct pose detected: ${data.pose_name} with confidence ${data.confidence}`);
+                        handleCorrectPose();
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error sending frame:', error);
+            
+            if (isCapturingFrames) {
+                gameState.connectionAttempts++;
+                
+                if (gameState.connectionAttempts > gameState.maxConnectionAttempts) {
+                    // Show error UI and attempt recovery
+                    showConnectionErrorNotification('Error connecting to server: ' + error.message);
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error capturing frame:', error);
+    }
+}
+
+// Show camera error message
+function showCameraError(message) {
+    const errorDiv = document.createElement('div');
+    errorDiv.id = 'cameraErrorNotification';
+    errorDiv.className = 'alert alert-danger camera-error';
+    errorDiv.innerHTML = `
+        <strong><i class="fas fa-video-slash"></i> Camera Error</strong>
+        <p>${message}</p>
+        <p>Please make sure your camera is connected and that you've granted permission to use it.</p>
+        <button id="retryCameraBtn" class="btn btn-warning mt-2">
+            <i class="fas fa-sync"></i> Retry Camera Access
+        </button>
+    `;
+    
+    // Add to the page
+    document.body.appendChild(errorDiv);
+    
+    // Add event listener for retry button
+    document.getElementById('retryCameraBtn').addEventListener('click', function() {
+        // Remove the error notification
+        errorDiv.remove();
+        
+        // Try setting up the camera again
+        setupCameraCapture();
+    });
+}
+
+// Modify the existing checkPose function to use our new direct frame submission
+async function checkPose() {
+    if (!gameState.waitingForPose || !gameState.started) return;
+    
+    // Our frame submission is now handled by captureAndSendFrame
+    // This function is kept for compatibility but doesn't need to do the fetch anymore
+    
+    // Continue checking poses if game is still active
+    if (gameState.waitingForPose && gameState.started) {
+        setTimeout(checkPose, config.pollInterval);
+    }
+}
+
+// Modify the initialSetup function to call setupCameraCapture
+function initialSetup() {
+    console.log("Running initial setup...");
+    
+    // Setup camera capture first
+    setupCameraCapture();
+    
+    // Then run the initial checks for pose detection
+    setTimeout(checkInitialPose, 1000);
+}
+

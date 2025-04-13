@@ -1,10 +1,11 @@
-from flask import Flask, render_template, Response, jsonify
+from flask import Flask, render_template, Response, jsonify, request
 import torch
 import cv2
 import numpy as np
 from pathlib import Path
 import time
 import traceback
+import base64
 
 # Import from utils module
 from utils import get_keypoints, extract_features_directly, draw_skeleton, POSE_CLASSES
@@ -132,29 +133,33 @@ def preprocess_features(features, scaler_params):
 model, scaler_params = load_model_and_scaler()
 pose_buffer = PoseBuffer(size=5, threshold=0.5)  # Lower threshold for more responsive detection
 
-# Global variable to store camera
-camera = None
+# Global variable to store the latest frame from the frontend
+latest_frame = None
+last_frame_time = 0
 
+# This function is no longer needed since we'll get frames from the frontend
+# def get_camera():
+#     global camera
+#     if camera is None:
+#         camera = cv2.VideoCapture(0)
+#     return camera
 
-def get_camera():
-    global camera
-    if camera is None:
-        camera = cv2.VideoCapture(0)
-    return camera
-
-
+# This function is still needed for cleanup
 def release_camera():
     global camera
     if camera is not None:
         camera.release()
         camera = None
 
-
 def predict_pose(frame):
     """
     Predict pose from a frame using the models.
     Returns: annotated frame, pose class index, and confidence
     """
+    if frame is None:
+        print("Warning: Frame is None, cannot predict pose")
+        return None, None, 0.0
+        
     # Mirror the frame for more intuitive interaction
     frame = cv2.flip(frame, 1)
     
@@ -224,34 +229,108 @@ def predict_pose(frame):
     
     return annotated_frame, pose_idx, confidence_val
 
-
-def generate_frames():
-    camera = get_camera()
-    while True:
-        success, frame = camera.read()
-        if not success:
-            break
+# New endpoint to receive frames from the frontend
+@app.route('/submit_frame', methods=['POST'])
+def submit_frame():
+    global latest_frame, last_frame_time
+    
+    try:
+        # Get the frame data from the request
+        frame_data = request.json.get('frame')
+        
+        if not frame_data:
+            return jsonify({
+                'success': False,
+                'error': 'No frame data received'
+            })
+        
+        # Remove the data URL prefix
+        if frame_data.startswith('data:image/jpeg;base64,'):
+            frame_data = frame_data.replace('data:image/jpeg;base64,', '')
+        elif frame_data.startswith('data:image/png;base64,'):
+            frame_data = frame_data.replace('data:image/png;base64,', '')
+        
+        # Decode the base64 string
+        img_bytes = base64.b64decode(frame_data)
+        
+        # Convert to numpy array
+        img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+        
+        # Decode the image
+        frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        
+        if frame is None:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to decode frame'
+            })
+        
+        # Update the latest frame
+        latest_frame = frame
+        last_frame_time = time.time()
+        
+        # Process the frame and get pose information
+        annotated_frame, pose_idx, confidence = predict_pose(frame)
+        
+        # Only return pose information, not the full frame
+        if pose_idx is not None:
+            pose_name = POSE_CLASSES[pose_idx]
+            return jsonify({
+                'success': True,
+                'pose_idx': pose_idx,
+                'pose_name': pose_name,
+                'confidence': float(confidence)
+            })
         else:
-            # Process frame for pose detection
-            annotated_frame, _, _ = predict_pose(frame)
+            return jsonify({
+                'success': False,
+                'error': 'No pose detected'
+            })
             
-            # Encode and yield the frame
-            ret, buffer = cv2.imencode('.jpg', annotated_frame)
+    except Exception as e:
+        print(f"Error processing frame: {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f'Error processing frame: {str(e)}'
+        }), 500
+
+# Modified endpoint for video feed - will use annotated frames received from frontend
+def generate_frames():
+    global latest_frame
+    
+    while True:
+        if latest_frame is not None:
+            # We already have the latest frame, process it
+            annotated_frame, _, _ = predict_pose(latest_frame.copy())
+            
+            if annotated_frame is not None:
+                # Encode and yield the frame
+                ret, buffer = cv2.imencode('.jpg', annotated_frame)
+                frame = buffer.tobytes()
+                yield (b'--frame\r\n'
+                      b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        else:
+            # Generate a blank frame with a message if no frame is available
+            blank_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(blank_frame, "Waiting for camera...", (50, 240), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            ret, buffer = cv2.imencode('.jpg', blank_frame)
             frame = buffer.tobytes()
             yield (b'--frame\r\n'
                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-
+        
+        # Add a small delay to avoid flooding the browser with frames
+        time.sleep(0.1)
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-
 @app.route('/video_feed')
 def video_feed():
     return Response(generate_frames(),
                    mimetype='multipart/x-mixed-replace; boundary=frame')
-
 
 @app.route('/get_pose')
 def get_pose():
@@ -259,26 +338,26 @@ def get_pose():
     Endpoint to get the current user pose.
     Returns pose name and confidence as JSON.
     """
+    global latest_frame, last_frame_time
+    
     try:
         # Add timeout mechanism to avoid hanging connections
         max_detection_time = 2.0  # seconds
         start_time = time.time()
         
-        # Get camera and frame
-        camera = get_camera()
-        success, frame = camera.read()
-        
-        if not success:
-            print("Failed to capture frame")
+        # Check if we have a recent frame (within the last 5 seconds)
+        frame_age = time.time() - last_frame_time
+        if latest_frame is None or frame_age > 5.0:
+            print("No recent frame available")
             return jsonify({
                 'success': False,
-                'error': 'Failed to capture frame'
+                'error': 'No recent camera frame available. Please ensure your camera is active.'
             })
         
         # Process frame for pose detection with timeout handling
         try:
-            # Use existing prediction function
-            annotated_frame, pose_idx, confidence = predict_pose(frame)
+            # Use existing prediction function with the latest frame from frontend
+            annotated_frame, pose_idx, confidence = predict_pose(latest_frame.copy())
             
             # Check if pose detection is taking too long
             if time.time() - start_time > max_detection_time:
@@ -329,7 +408,6 @@ def get_pose():
                 
         except Exception as e:
             print(f"Error during pose detection: {str(e)}")
-            import traceback
             traceback.print_exc()
             
             # Try to return the last stable pose from buffer
@@ -368,7 +446,6 @@ def get_pose():
     except Exception as e:
         # Catch-all for any other errors
         print(f"Server error in get_pose: {str(e)}")
-        import traceback
         traceback.print_exc()
         
         return jsonify({
@@ -386,4 +463,5 @@ if __name__ == '__main__':
     try:
         app.run(host='0.0.0.0', port=5001, debug=True)
     finally:
-        release_camera() 
+        # No need to release the camera as we're not using it directly
+        pass 
